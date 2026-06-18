@@ -702,11 +702,6 @@
   gap: 12px;
 }
 
-.qsw-question-item {
-  /* overflow:hidden intentionally omitted — the hover translateY and
-     box-shadow would be clipped if overflow were hidden */
-}
-
 .qsw-question-btn {
   display: flex;
   align-items: center;
