@@ -665,13 +665,13 @@
 /* Wrapper has no margin of its own — spacing comes from the heading inside */
 .qsw-featured__headings {
   margin: 0;
+  margin: 10px 0 12px;
 }
 
 .qsw-featured__heading {
   font-size: 16px;
   font-weight: 700;
   color: var(--qsw-panel-text, #202223);
-  margin: 10px 0 12px;
   line-height: 1;
 }
 
