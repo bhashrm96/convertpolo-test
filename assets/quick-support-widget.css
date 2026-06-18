@@ -1,0 +1,1002 @@
+/* =============================================================
+   Quick Support Widget — Styles
+
+   All custom properties (--qsw-*) are declared on
+   #qsw-launcher-wrapper via inline style in the Liquid section
+   and cascade down to every child element.
+
+   Easing reference:
+     Standard interactions : cubic-bezier(0.4, 0, 0.2, 1)  200ms
+     Spring / pop elements  : cubic-bezier(0.34, 1.56, 0.64, 1)  260–320ms
+
+   Structure:
+     1.  Launcher wrapper
+     2.  Launcher button
+     3.  Panel
+     4.  Panel header
+     5.  Contact strip & tooltips
+     6.  Close button
+     7.  Views container & slide transitions
+     8.  View nav bar
+     9.  Category grid
+    10.  Empty states
+    11.  Featured questions
+    12.  Question list
+    13.  Answer view & pagination
+    14.  Mobile breakpoint  (≤ 480px)
+    15.  Screen-reader utility
+    16.  Reduced-motion overrides
+   ============================================================= */
+
+/* ── 1. Launcher wrapper ──────────────────────────────────── */
+
+#qsw-launcher-wrapper {
+  position: fixed;
+  /* env() accounts for the iPhone notch / home bar on iOS */
+  bottom: calc(var(--qsw-offset-bottom, 24px) + env(safe-area-inset-bottom, 0px));
+  left: calc(var(--qsw-offset-left, 24px) + env(safe-area-inset-left, 0px));
+  /* Maximum possible z-index — sits above everything including third-party overlays */
+  z-index: 2147483647;
+}
+
+/* ── 2. Launcher button ───────────────────────────────────── */
+
+.qsw-launcher {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--qsw-size, 56px);
+  height: var(--qsw-size, 56px);
+  border-radius: 50%;
+  background-color: var(--qsw-bg, #C0392B);
+  color: var(--qsw-icon-color, #ffffff);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.18),
+    0 2px 4px rgba(0, 0, 0, 0.12);
+  /* Only transition transform + opacity; box-shadow is excluded so the
+     @keyframes qsw-breathe animation on that property isn't interrupted */
+  transition:
+    transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* outline:none is intentional — we use :focus-visible below instead,
+     which only triggers for keyboard navigation, not mouse clicks */
+  outline: none;
+  /* Normalize iOS Safari button rendering */
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+}
+
+.qsw-launcher:hover {
+  transform: scale(1.05);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.22),
+    0 4px 8px rgba(0, 0, 0, 0.14);
+}
+
+.qsw-launcher:active {
+  transform: scale(0.93);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.16),
+    0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.qsw-launcher:focus-visible {
+  outline: 3px solid var(--qsw-icon-color, #ffffff);
+  outline-offset: 4px;
+}
+
+/* JS adds this class while the panel is open to hide and disable the button */
+.qsw-launcher.qsw-launcher--hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
+}
+
+/* Preset SVG icon */
+.qsw-launcher svg {
+  display: block;
+  width: 44%;
+  height: 44%;
+  flex-shrink: 0;
+}
+
+/* Merchant-uploaded image icon */
+.qsw-launcher__custom-icon {
+  display: block;
+  width: 50%;
+  height: 50%;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* ── 3. Panel ─────────────────────────────────────────────── */
+
+.qsw-panel {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  bottom: 20px;
+  width: 376px;
+  background: var(--qsw-panel-bg, #f6f6f8);
+  font-family: var(--qsw-font, inherit);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.14),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  /* overflow:visible so the wave ::after pseudo-element on the header
+     can bleed outside the panel bounds without being clipped */
+  overflow: visible;
+  /* Default / closed state — panel starts invisible and shifted down */
+  opacity: 0;
+  transform: translateY(16px) scale(0.97);
+  /* Spring curve gives the open animation a slight bounce */
+  transition:
+    opacity 260ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+  border-radius: var(--qsw-panel-radius, 16px) var(--qsw-panel-radius, 16px) 0 0;
+}
+
+/* Animate to open state when the [hidden] attribute is removed by JS */
+.qsw-panel:not([hidden]) {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* The panel stays in the DOM even when closed so the close animation can play.
+   display:flex !important overrides the browser's default display:none for [hidden].
+   visibility:hidden hides it from screen readers during the closed state. */
+.qsw-panel[hidden] {
+  display: flex !important;
+  visibility: hidden;
+}
+
+/* JS adds this class after the open animation starts so visibility:hidden
+   is lifted and the rendered content becomes accessible */
+.qsw-panel.qsw-panel--visible {
+  visibility: visible;
+}
+
+/* ── 4. Panel header ──────────────────────────────────────── */
+
+/* position:relative is required for the ::after wave to be positioned
+   against this element, not the viewport */
+.qsw-panel__header {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 20px 18px;
+  background: var(--qsw-accent, #b71c1c);
+  /* overflow:visible lets the wave pseudo-element hang below the header */
+  overflow: visible;
+  flex-shrink: 0;
+  border-radius: var(--qsw-panel-radius, 16px) var(--qsw-panel-radius, 16px) 0 0;
+}
+
+/* min-height prevents the row from collapsing to zero when no social icons
+   and no panel title are configured */
+.qsw-panel__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+}
+
+/* Panel title shown below the contact strip when social icons are present */
+.qsw-panel__title {
+  margin: 10px 0 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.3;
+}
+
+/* Modifier: title moves inline into the header row when no social icons exist.
+   flex:1 + min-width:0 allows it to truncate correctly inside a flex row. */
+.qsw-panel__title--inline {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.3;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 8px;
+}
+
+/* Decorative wave that bridges the header and the panel body.
+   Uses border-image with an inline SVG data URI so no extra HTTP request.
+   The fill colour is overridden by a dynamic <style> in the Liquid template
+   so it always matches the panel background colour chosen in the theme editor. */
+.qsw-panel__header::after {
+  content: "";
+  position: absolute;
+  width: 100%;
+  left: 0;
+  bottom: -3px;
+  border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 24 150 28'%3E%3Cdefs%3E%3Cpath id='gentle-wave' d='M-160 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18v44h-352z'/%3E%3C/defs%3E%3Cg%3E%3Cuse href='%23gentle-wave' x='30' y='3' fill='%23ffffff'/%3E%3C/g%3E%3C/svg%3E");
+  border-image-slice: 0 0 100%;
+  border-bottom: solid 15px;
+}
+
+/* ── 5. Contact strip & tooltips ──────────────────────────── */
+
+/* min-height matches the header-row height so the row doesn't collapse
+   when this strip is present but empty (edge case during editor preview) */
+.qsw-contact-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+/* transition:none on the anchor itself — only the SVG inside animates */
+.qsw-contact-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--qsw-accent, #C0392B);
+  text-decoration: none;
+  transition: none;
+}
+
+.qsw-contact-btn:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+/* Spring curve gives the icon a subtle bounce on hover */
+.qsw-contact-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.qsw-contact-btn:hover svg,
+.qsw-contact-btn:focus-visible svg {
+  transform: scale(1.14);
+}
+
+.qsw-contact-btn:active svg {
+  transform: scale(0.9);
+}
+
+/* Tooltip: shared positioning for both the arrow (::before) and bubble (::after).
+   Both start offset 4px downward and fade + slide up on hover. */
+.qsw-contact-btn::before,
+.qsw-contact-btn::after {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%) translateY(4px);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Tooltip arrow — CSS triangle via border trick.
+   z-index:2 places it above the bubble so the triangle occludes the bubble edge. */
+.qsw-contact-btn::before {
+  content: '';
+  margin-bottom: 5px;
+  z-index: 2;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #ffffff;
+}
+
+/* Tooltip bubble — content pulled from the data-tooltip attribute on the element */
+.qsw-contact-btn::after {
+  content: attr(data-tooltip);
+  margin-bottom: 10px;
+  z-index: 1;
+  background: #ffffff;
+  color: #202223;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.1px;
+  line-height: 1.4;
+  padding: 4px 8px;
+  border-radius: 3px;
+  white-space: nowrap;
+  box-shadow: -1px 0 20px #00000026, 0 1px 5px #00000026;
+}
+
+.qsw-contact-btn:hover::before,
+.qsw-contact-btn:hover::after,
+.qsw-contact-btn:focus-visible::before,
+.qsw-contact-btn:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── 6. Close button ──────────────────────────────────────── */
+
+/* Positioned absolutely so it doesn't participate in the flex layout
+   of the header row — this lets the social strip / title align freely */
+.qsw-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: transparent;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* Ripple background scales in from zero on hover via the ::before pseudo-element */
+.qsw-close-btn::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.18);
+  transform: scale(0);
+  transition: transform 260ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qsw-close-btn:hover::before {
+  transform: scale(1);
+}
+
+.qsw-close-btn:active {
+  transform: scale(0.9);
+}
+
+.qsw-close-btn:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+/* z-index:1 keeps the SVG icon above the ::before ripple layer */
+.qsw-close-btn svg {
+  width: 16px;
+  height: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── 7. Views container & slide transitions ───────────────── */
+
+/* overflow:hidden clips the views so only one is visible at a time during
+   the horizontal slide transition */
+.qsw-views {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 0 0 var(--qsw-panel-radius, 16px) var(--qsw-panel-radius, 16px);
+}
+
+/* Each view fills the container absolutely so they stack.
+   Only the active view has opacity:1 and pointer-events:auto. */
+.qsw-view {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  /* Prevents the parent page from scrolling when the user reaches the top
+     or bottom of a view */
+  overscroll-behavior: contain;
+  /* Legacy iOS momentum scrolling — still needed for Safari < 13 */
+  -webkit-overflow-scrolling: touch;
+  transition:
+    opacity 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 16px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Slim custom scrollbar for WebKit browsers */
+.qsw-view::-webkit-scrollbar {
+  width: 2px;
+}
+
+.qsw-view::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.qsw-view::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+  border-radius: 999px;
+}
+
+/* Hide scrollbar arrow buttons — unnecessary for a 2px track */
+.qsw-view::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.qsw-view::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox scrollbar — @supports check ensures this block is ignored by browsers
+   that do support ::-webkit-scrollbar (which would handle it above) */
+@supports not selector(::-webkit-scrollbar) {
+  .qsw-view {
+    scrollbar-width: thin;
+    scrollbar-color: #4a4a4a transparent;
+  }
+}
+
+/* Views are hidden with [hidden] + display:block !important (overrides the
+   browser default display:none) so the element still occupies layout space
+   for the slide animation. visibility:hidden removes it from the a11y tree. */
+.qsw-view[hidden] {
+  display: block !important;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ── Directional slide states ─────────────────────────────── */
+/* JS applies these classes to animate views in and out.
+   Forward navigation: current exits left, next enters from right.
+   Back navigation:    current exits right, next enters from left. */
+
+.qsw-view--active {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.qsw-view--enter-right {
+  opacity: 0;
+  transform: translateX(32px);
+}
+
+.qsw-view--exit-left {
+  opacity: 0;
+  transform: translateX(-32px);
+}
+
+.qsw-view--enter-left {
+  opacity: 0;
+  transform: translateX(-32px);
+}
+
+.qsw-view--exit-right {
+  opacity: 0;
+  transform: translateX(32px);
+}
+
+/* ── 8. View nav bar ──────────────────────────────────────── */
+
+.qsw-view-nav {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+/* Back button — rendered via the qsw-back-btn snippet */
+.qsw-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 36px;
+  border-radius: 4px;
+  background: none;
+  border: 1px solid #babfc3;
+  cursor: pointer;
+  color: #5c5f62;
+  padding: 0;
+  flex-shrink: 0;
+  transition: color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qsw-back-btn:hover {
+  color: #202223;
+}
+
+.qsw-back-btn:focus-visible {
+  outline: 2px solid rgba(0, 0, 0, 0.3);
+  outline-offset: 2px;
+}
+
+.qsw-back-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* View heading — used for category name in question view,
+   and question text in answer view */
+.qsw-view-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--qsw-panel-text, #202223);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* line-height matches the back button height so they align vertically */
+  line-height: 28px;
+}
+
+/* Answer view nav has two stacked labels (question + category) */
+.qsw-view-nav__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Category label shown below the question title in the answer view nav */
+.qsw-view-cat {
+  font-size: 14px;
+  color: var(--qsw-panel-text-secondary, #6D7175);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 9. Category grid ─────────────────────────────────────── */
+
+.qsw-categories {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.qsw-category-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  overflow: hidden;
+  position: relative;
+  border-radius: 4px;
+  /* Transparent border in default state prevents layout shift when the
+     1px accent border appears on hover */
+  border: 1px solid transparent;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px #3f3f440d, 0 1px 3px #3f3f4426;
+  cursor: pointer;
+  text-align: center;
+  /* Transition written as separate longhand properties so individual
+     values (duration, easing) are easy to read and adjust */
+  transition-property: border-color, transform, box-shadow;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  font: inherit;
+  color: #202223;
+}
+
+.qsw-category-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 1px #3f3f4426, 0 4px 12px #3f3f4426;
+  border-color: var(--qsw-accent, #C0392B);
+}
+
+.qsw-category-card:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.qsw-category-card:focus-visible {
+  outline: 2px solid var(--qsw-accent, #C0392B);
+  outline-offset: 2px;
+}
+
+.qsw-category-card__icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: block;
+  flex-shrink: 0;
+}
+
+.qsw-category-card__title {
+  color: #202223;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+/* ── 10. Empty states ─────────────────────────────────────── */
+
+/* Shown by JS in the question list when a category has no questions */
+.qsw-empty-state {
+  list-style: none;
+  text-align: center;
+  padding: 16px;
+  font-size: 13px;
+  /* color-mix() fades the text colour to 40% opacity without needing
+     a separate rgba value — stays in sync with --qsw-panel-text */
+  color: color-mix(in srgb, var(--qsw-panel-text, #202223) 40%, transparent);
+}
+
+/* grid-column: 1 / -1 makes the empty message span both grid columns
+   so it centres correctly inside the two-column category grid */
+.qsw-empty-categories {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 16px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--qsw-panel-text, #202223) 40%, transparent);
+}
+
+/* Secondary note shown only in theme editor mode (e.g. "widget hidden from visitors") */
+.qsw-empty-categories__note {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--qsw-panel-text, #202223) 50%, transparent);
+}
+
+/* ── 11. Featured questions (home view) ───────────────────── */
+
+/* Featured section is built by JS and appended to the home view */
+.qsw-featured {
+  padding-top: 18px;
+  margin-bottom: 4px;
+}
+
+/* Wrapper has no margin of its own — spacing comes from the heading inside */
+.qsw-featured__headings {
+  margin: 0;
+}
+
+.qsw-featured__heading {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--qsw-panel-text, #202223);
+  margin: 10px 0 12px;
+  line-height: 1;
+}
+
+.qsw-featured__subheading {
+  font-size: 13px;
+  color: var(--qsw-panel-text-secondary, #6D7175);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.qsw-featured__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── 12. Question list ────────────────────────────────────── */
+
+.qsw-question-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qsw-question-item {
+  /* overflow:hidden intentionally omitted — the hover translateY and
+     box-shadow would be clipped if overflow were hidden */
+}
+
+.qsw-question-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  background: #ffffff;
+  /* Transparent border prevents layout shift on hover */
+  border: 1px solid transparent;
+  box-shadow: 0 0 0 1px #3f3f440d, 0 1px 3px #3f3f4426;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  color: #202223;
+  text-align: left;
+  transition-property: border-color, transform, box-shadow;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qsw-question-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 1px #3f3f4426, 0 4px 12px #3f3f4426;
+  border-color: var(--qsw-accent, #C0392B);
+}
+
+.qsw-question-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* outline-offset:-2px keeps the focus ring inside the card border */
+.qsw-question-btn:focus-visible {
+  outline: 2px solid var(--qsw-accent, #C0392B);
+  outline-offset: -2px;
+}
+
+.qsw-question-btn__avatar {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: block;
+}
+
+/* flex:1 + min-width:0 allows the text block to shrink and truncate
+   correctly inside the flex row without overflowing */
+.qsw-question-btn__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.qsw-question-btn__title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  display: block;
+}
+
+.qsw-question-btn__cat {
+  font-size: 13px;
+  font-weight: 400;
+  color: #6D7175;
+  display: block;
+}
+
+/* Arrow shifts right on hover to reinforce the "click to go forward" affordance */
+.qsw-question-btn__arrow {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--qsw-accent, #C0392B);
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qsw-question-btn:hover .qsw-question-btn__arrow {
+  transform: translateX(3px);
+}
+
+/* ── 13. Answer view & pagination ─────────────────────────── */
+
+/* Answer HTML is injected by JS into this element via innerHTML.
+   The rte class applies Shopify's rich-text-editor prose styles. */
+.qsw-answer-content {
+  margin: 16px 0 0;
+  padding: 16px;
+  background-color: #ffffff;
+  /* Asymmetric radius: sharp top-left corner anchors to the question above;
+     rounded remaining corners give a "speech bubble" appearance */
+  border-radius: 4px 20px 20px;
+  box-shadow: #455a644d 0 20px 15px -20px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #202223;
+}
+
+/* Reset paragraph spacing within rich text answers */
+.qsw-answer-content p {
+  margin: 0 0 10px;
+}
+
+.qsw-answer-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* Links inside answers use the brand accent colour */
+.qsw-answer-content a {
+  color: var(--qsw-accent, #C0392B);
+}
+
+.qsw-answer-content ul,
+.qsw-answer-content ol {
+  padding-left: 18px;
+  margin: 0 0 10px;
+}
+
+/* Prev / Next navigation between questions in the same category */
+.qsw-answer-nav {
+  padding-top: 10px;
+  margin-top: 10px;
+  flex-shrink: 0;
+}
+
+.qsw-pagination {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Each navitem wraps one button; JS toggles [hidden] to show/hide
+   prev and next independently depending on position in the question list */
+.qsw-navitem {
+  min-width: 0;
+}
+
+/* Prev/Next text colour responds to the theme editor colour pickers
+   so merchants can match their store palette */
+.qsw-navlink {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+  color: var(--qsw-panel-text-secondary, #6D7175);
+  transition: color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+}
+
+.qsw-navlink:hover {
+  color: var(--qsw-panel-text, #202223);
+}
+
+.qsw-navlink:focus-visible {
+  outline: 2px solid rgba(0, 0, 0, 0.3);
+  outline-offset: 2px;
+}
+
+/* Spring curve on the icon gives the directional nudge a subtle bounce */
+.qsw-navlink__icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--qsw-panel-text-secondary, #5c5f62);
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.qsw-navlink__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Prev icon nudges left, next icon nudges right — reinforces direction */
+.qsw-navlink--prev:hover .qsw-navlink__icon {
+  transform: translateX(-3px);
+}
+
+.qsw-navlink--next:hover .qsw-navlink__icon {
+  transform: translateX(3px);
+}
+
+.qsw-navlink__label {
+  font-size: 14px;
+  font-weight: 500;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+/* ── 14. Mobile breakpoint ────────────────────────────────── */
+
+@media screen and (max-width: 480px) {
+  /* Slightly smaller launcher on mobile so it doesn't crowd the UI */
+  .qsw-launcher {
+    width: calc(var(--qsw-size, 56px) * 0.9);
+    height: calc(var(--qsw-size, 56px) * 0.9);
+  }
+
+  /* Panel stretches to fill most of the screen, respecting iOS safe areas */
+  .qsw-panel {
+    top: max(20px, env(safe-area-inset-top, 20px));
+    bottom: max(20px, env(safe-area-inset-bottom, 20px));
+    left: max(20px, env(safe-area-inset-left, 20px));
+    width: calc(100vw - max(20px, env(safe-area-inset-left, 20px)) - 20px);
+  }
+
+  /* 44px is the WCAG minimum touch target size for interactive elements */
+  .qsw-back-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .qsw-close-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .qsw-contact-btn {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* ── 15. Screen-reader utility ────────────────────────────── */
+
+/* Visually hides an element while keeping it in the accessibility tree.
+   Used for the aria-live announcement region (#qsw-sr-live). */
+.qsw-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── 16. Reduced-motion overrides ─────────────────────────── */
+
+/* Respects the OS-level "reduce motion" accessibility setting.
+   transform:none !important is needed to override inline style values
+   that JS may have set during an interrupted animation. */
+@media (prefers-reduced-motion: reduce) {
+  .qsw-launcher,
+  .qsw-launcher:hover,
+  .qsw-launcher:active {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+
+  .qsw-panel {
+    transition: none;
+    transform: none !important;
+  }
+
+  .qsw-view {
+    transition: none;
+    transform: none !important;
+  }
+
+  .qsw-category-card,
+  .qsw-contact-btn,
+  .qsw-question-btn,
+  .qsw-navlink,
+  .qsw-close-btn,
+  .qsw-back-btn {
+    transition: none;
+    transform: none !important;
+  }
+
+  .qsw-contact-btn svg {
+    transition: none;
+  }
+
+  .qsw-close-btn:hover {
+    transform: none;
+  }
+
+  .qsw-navlink__icon {
+    transition: none;
+  }
+
+  .qsw-contact-btn::before,
+  .qsw-contact-btn::after {
+    transition: none;
+  }
+}

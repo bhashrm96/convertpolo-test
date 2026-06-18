@@ -1,0 +1,823 @@
+{%- comment -%}
+  Quick Support Widget — Section
+  ─────────────────────────────────────────────────────────────
+  All FAQ data is serialised as JSON into a <script> tag and
+  read by quick-support-widget.js at runtime.  No AJAX calls.
+
+  Structure:
+    1. Boolean flags
+    2. Asset loading + dynamic styles
+    3. JSON data block
+    4. Launcher wrapper (conditionally rendered)
+       a. Launcher button + icon
+       b. Panel
+          i.  Header (contact strip / title / close)
+          ii. Views (home → questions → answer)
+    5. JS script tag
+    6. Schema
+{%- endcomment -%}
+
+{%- if section.settings.show_widget -%}
+
+{%- comment -%} Single source for the fallback icon URL used in both the
+  JSON data block and the category card loop. {%- endcomment -%}
+{%- assign qsw_default_icon = 'https://cdn.shopify.com/s/files/1/0615/9591/0319/files/hand-delivery-box-box-svgrepo-com.svg?v=1738088007' -%}
+
+{%- comment -%} ── 1. Boolean flags ──────────────────────────────────────
+  Computed once at the top and reused throughout the template to avoid
+  repeating the same loop or condition checks inline. {%- endcomment -%}
+
+{%- comment -%} qsw_has_cats: controls whether the launcher is rendered at all.
+  The widget is hidden from live visitors until at least one category exists. {%- endcomment -%}
+{%- assign qsw_has_cats = false -%}
+{%- for block in section.blocks -%}
+  {%- if block.type == 'category' -%}
+    {%- assign qsw_has_cats = true -%}
+  {%- endif -%}
+{%- endfor -%}
+
+{%- comment -%} qsw_has_social: controls the panel header layout.
+  When true  → contact icons sit in the header row, title shifts below.
+  When false → title moves inline into the header row. {%- endcomment -%}
+{%- assign qsw_has_social = false -%}
+{%- if section.settings.phone_show and section.settings.phone_number != blank -%}
+  {%- assign qsw_has_social = true -%}
+{%- elsif section.settings.whatsapp_show and section.settings.whatsapp_number != blank -%}
+  {%- assign qsw_has_social = true -%}
+{%- elsif section.settings.email_show and section.settings.email_address != blank -%}
+  {%- assign qsw_has_social = true -%}
+{%- endif -%}
+
+{%- comment -%} ── 2. Asset loading + dynamic styles ─────────────────
+  CSS is loaded non-blocking: media="print" + onload swap prevents render-blocking.
+  The <noscript> fallback loads it normally for non-JS environments. {%- endcomment -%}
+<link rel="stylesheet" href="{{ 'quick-support-widget.css' | asset_url }}" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="{{ 'quick-support-widget.css' | asset_url }}"></noscript>
+
+{%- comment -%} '#' must be URL-encoded to '%23' inside an SVG data URI attribute {%- endcomment -%}
+{%- assign qsw_wave_fill = section.settings.panel_bg_color | default: '#F6F6F8' | replace: '#', '%23' -%}
+{%- comment -%} Attempt to load a bold weight of the chosen font for headings {%- endcomment -%}
+{%- assign qsw_font_bold = section.settings.widget_font | font_modify: 'weight', 'bolder' -%}
+<style>
+  {{ section.settings.widget_font | font_face }}
+  {%- if qsw_font_bold -%}{{ qsw_font_bold | font_face }}{%- endif -%}
+  #qsw-launcher-wrapper .qsw-panel,
+  #qsw-launcher-wrapper .qsw-panel button,
+  #qsw-launcher-wrapper .qsw-panel a {
+    font-family: {{ section.settings.widget_font.family }}, {{ section.settings.widget_font.fallback_families }};
+  }
+  {%- comment -%} Override the static white wave fill in the CSS file with the
+    actual panel background colour chosen by the merchant. {%- endcomment -%}
+  #qsw-launcher-wrapper .qsw-panel__header::after {
+    border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 24 150 28'%3E%3Cdefs%3E%3Cpath id='gentle-wave' d='M-160 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18v44h-352z'/%3E%3C/defs%3E%3Cg%3E%3Cuse href='%23gentle-wave' x='30' y='3' fill='{{ qsw_wave_fill }}'/%3E%3C/g%3E%3C/svg%3E");
+  }
+</style>
+
+{%- comment -%} ── 3. JSON data block ────────────────────────────────
+  All category and question data is emitted here as JSON and read by JS
+  via document.getElementById('qsw-data').  This avoids AJAX calls and
+  works with Shopify's block ordering — the nested loop maps each question
+  block to its nearest preceding category block. {%- endcomment -%}
+{%- assign categories = '' -%}
+{%- assign cat_index = -1 -%}
+
+<script type="application/json" id="qsw-data">
+{
+  "emptyStateText": {{ section.settings.empty_state_text | default: 'No questions yet.' | json }},
+  "featuredHeading": {{ section.settings.featured_heading | default: 'General Queries' | json }},
+  "featuredSubheading": {{ section.settings.featured_subheading | json }},
+  "featuredMaxPerCat": {{ section.settings.featured_max_per_cat | default: 2 }},
+  "categories": [
+    {%- assign cat_i = -1 -%}
+    {%- assign first_cat_emitted = false -%}
+    {%- for block in section.blocks -%}
+      {%- if block.type == 'category' -%}
+        {%- assign cat_i = cat_i | plus: 1 -%}
+        {%- if first_cat_emitted -%},{%- endif -%}
+        {%- assign first_cat_emitted = true -%}
+        {
+          "id": {{ cat_i }},
+          "title": {{ block.settings.title | json }},
+          "color": {{ block.settings.color | json }},
+          "questions": [
+            {%- assign q_i = -1 -%}
+            {%- assign in_this_cat = false -%}
+            {%- for qblock in section.blocks -%}
+              {%- if qblock.type == 'category' -%}
+                {%- if qblock.id == block.id -%}
+                  {%- assign in_this_cat = true -%}
+                {%- elsif in_this_cat -%}
+                  {%- assign in_this_cat = false -%}
+                {%- endif -%}
+              {%- elsif qblock.type == 'question' and in_this_cat -%}
+                {%- assign q_i = q_i | plus: 1 -%}
+                {%- if q_i > 0 -%},{%- endif -%}
+                {
+                  "id": {{ q_i }},
+                  "text": {{ qblock.settings.question | json }},
+                  "answer": {{ qblock.settings.answer | json }},
+                  "featured": {{ qblock.settings.featured | default: false }},
+                  {%- if qblock.settings.icon != blank -%}
+                  "image": {{ qblock.settings.icon | image_url: width: 80 | json }}
+                  {%- else -%}
+                  "image": {{ qsw_default_icon | json }}
+                  {%- endif -%}
+                }
+              {%- endif -%}
+            {%- endfor -%}
+          ]
+        }
+      {%- endif -%}
+    {%- endfor -%}
+  ]
+}
+</script>
+
+{%- comment -%} ── 4. Launcher wrapper ───────────────────────────────
+  Hidden on live storefronts when no categories exist so visitors never
+  see an empty widget.  Still rendered in the theme editor (request.design_mode)
+  so merchants can configure it before adding content. {%- endcomment -%}
+{%- if qsw_has_cats or request.design_mode -%}
+
+{%- comment -%} All --qsw-* custom properties are declared here on the wrapper
+  and cascade to every child element, allowing CSS to reference them throughout
+  without needing per-element inline styles. {%- endcomment -%}
+<div
+  id="qsw-launcher-wrapper"
+  style="
+    --qsw-bg: {{ section.settings.launcher_bg_color }};
+    --qsw-icon-color: {{ section.settings.launcher_icon_color }};
+    --qsw-size: {{ section.settings.launcher_size }}px;
+    --qsw-offset-bottom: {{ section.settings.launcher_offset_bottom }}px;
+    --qsw-offset-left: {{ section.settings.launcher_offset_left }}px;
+    --qsw-accent: {{ section.settings.brand_accent_color | default: section.settings.launcher_bg_color }};
+    --qsw-panel-bg: {{ section.settings.panel_bg_color }};
+    --qsw-panel-text: {{ section.settings.panel_text_color }};
+    --qsw-panel-text-secondary: {{ section.settings.secondary_text_color | default: '#6B6B6B' }};
+    --qsw-panel-radius: {{ section.settings.panel_corner_radius }}px;
+    --qsw-font: {{ section.settings.widget_font.family }}, {{ section.settings.widget_font.fallback_families }};
+  "
+>
+  <button
+    id="qsw-launcher"
+    class="qsw-launcher"
+    type="button"
+    aria-label="Open support"
+    aria-expanded="false"
+    aria-controls="qsw-panel"
+  >
+    {%- comment -%} Custom uploaded image overrides the preset icon selection {%- endcomment -%}
+    {%- if section.settings.launcher_custom_icon != blank -%}
+      {{
+        section.settings.launcher_custom_icon
+        | image_url: width: 80
+        | image_tag:
+          class: 'qsw-launcher__custom-icon',
+          alt: '',
+          loading: 'lazy',
+          widths: '40, 56, 80'
+      }}
+    {%- else -%}
+      {%- case section.settings.launcher_preset_icon -%}
+        {%- when 'chat' -%}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20 2H4C2.9 2 2 2.9 2 4v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+        {%- when 'headphones' -%}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true" focusable="false"><path d="M136,210c-24.814,0-45,20.186-45,45v122c0,24.814,20.186,45,45,45c24.814,0,45-20.186,45-45V255C181,230.186,160.814,210,136,210z"/><path d="M61,255c0-4.327,0.571-8.507,1.278-12.634C44.2,248.209,31,265.001,31,285v62c0,19.999,13.2,36.791,31.278,42.634C61.571,385.507,61,381.327,61,377V255z"/><path d="M376,210c-24.814,0-45,20.186-45,45v122c0,24.814,20.186,45,45,45c4.51,0,8.782-0.868,12.892-2.108C383.308,438.401,366.305,452,346,452h-47.763c-6.213-17.422-22.707-30-42.237-30c-24.814,0-45,20.186-45,45c0,24.814,20.186,45,45,45c19.53,0,36.024-12.578,42.237-30H346c41.353,0,75-33.647,75-75v-30V255C421,230.186,400.814,210,376,210z"/><path d="M449.722,242.366C450.429,246.493,451,250.673,451,255v122c0,4.327-0.571,8.507-1.278,12.634C467.8,383.791,481,366.999,481,347v-62C481,265.001,467.8,248.209,449.722,242.366z"/><path d="M256,0C131.928,0,31,100.928,31,225v0.383c8.937-6.766,19.277-11.717,30.687-13.934C68.698,110.251,153.054,30,256,30s187.302,80.251,194.313,181.448c11.409,2.217,21.749,7.169,30.687,13.934V225C481,100.928,380.072,0,256,0z"/></svg>
+        {%- else -%}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+      {%- endcase -%}
+    {%- endif -%}
+  </button>
+
+  {%- comment -%} Widget panel {%- endcomment -%}
+  <div
+    id="qsw-panel"
+    class="qsw-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Quick Support"
+    hidden
+  >
+    {%- comment -%} ── Panel header ─────────────────────────────────────
+      Layout depends on whether social contact icons are configured:
+        • Social icons present  → icons in header row, title below
+        • No icons, title set   → title sits inline in the header row
+        • No icons, no title    → empty strip preserves the row height {%- endcomment -%}
+    <div class="qsw-panel__header">
+      <div class="qsw-panel__header-row">
+        {%- if qsw_has_social -%}
+        <div class="qsw-contact-strip">
+          {%- if section.settings.phone_show and section.settings.phone_number != blank -%}
+            <a
+              href="tel:{{ section.settings.phone_number | remove: ' ' }}"
+              class="qsw-contact-btn"
+              aria-label="{{ section.settings.phone_label | default: 'Continue on phone' | escape }}"
+              data-tooltip="{{ section.settings.phone_label | default: 'Continue on phone' | escape }}"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M493.4 24.6l-104-24c-11.3-2.6-22.9 3.3-27.5 13.9l-48 112c-4.2 9.8-1.4 21.3 6.9 28l60.6 49.6c-36 76.7-98.9 140.5-177.2 177.2l-49.6-60.6c-6.8-8.3-18.2-11.1-28-6.9l-112 48C3.9 366.5-2 378.1.6 389.4l24 104C27.1 504.2 36.7 512 48 512c256.1 0 464-207.5 464-464 0-11.2-7.7-20.9-18.6-23.4z"/></svg>
+            </a>
+          {%- endif -%}
+
+          {%- if section.settings.whatsapp_show and section.settings.whatsapp_number != blank -%}
+            <a
+              href="https://wa.me/{{ section.settings.whatsapp_number | remove: '+' | remove: ' ' | remove: '-' }}"
+              class="qsw-contact-btn"
+              aria-label="{{ section.settings.whatsapp_label | default: 'Continue on WhatsApp' | escape }}"
+              data-tooltip="{{ section.settings.whatsapp_label | default: 'Continue on WhatsApp' | escape }}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m17.507 14.307-.009.075c-2.199-1.096-2.429-1.242-2.713-.816-.197.295-.771.964-.944 1.162-.175.195-.349.21-.646.075-.3-.15-1.263-.465-2.403-1.485-.888-.795-1.484-1.77-1.66-2.07-.293-.506.32-.578.878-1.634.1-.21.049-.375-.025-.524-.075-.15-.672-1.62-.922-2.206-.24-.584-.487-.51-.672-.51-.576-.05-.997-.042-1.368.344-1.614 1.774-1.207 3.604.174 5.55 2.714 3.552 4.16 4.206 6.804 5.114.714.227 1.365.195 1.88.121.574-.091 1.767-.721 2.016-1.426.255-.705.255-1.29.18-1.425-.074-.135-.27-.21-.57-.345z"/><path d="m20.52 3.449c-7.689-7.433-20.414-2.042-20.419 8.444 0 2.096.549 4.14 1.595 5.945l-1.696 6.162 6.335-1.652c7.905 4.27 17.661-1.4 17.665-10.449 0-3.176-1.24-6.165-3.495-8.411zm1.482 8.417c-.006 7.633-8.385 12.4-15.012 8.504l-.36-.214-3.75.975 1.005-3.645-.239-.375c-4.124-6.565.614-15.145 8.426-15.145 2.654 0 5.145 1.035 7.021 2.91 1.875 1.859 2.909 4.35 2.909 6.99z"/></svg>
+            </a>
+          {%- endif -%}
+
+          {%- if section.settings.email_show and section.settings.email_address != blank -%}
+            <a
+              href="mailto:{{ section.settings.email_address }}"
+              class="qsw-contact-btn"
+              aria-label="{{ section.settings.email_label | default: 'Continue on email' | escape }}"
+              data-tooltip="{{ section.settings.email_label | default: 'Continue on email' | escape }}"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M467,61H45c-6.927,0-13.412,1.703-19.279,4.51L255,294.789l51.389-49.387c0,0,0.004-0.005,0.005-0.007 c0.001-0.002,0.005-0.004,0.005-0.004L486.286,65.514C480.418,62.705,473.929,61,467,61z"/><path d="M507.496,86.728L338.213,256.002L507.49,425.279c2.807-5.867,4.51-12.352,4.51-19.279V106 C512,99.077,510.301,92.593,507.496,86.728z"/><path d="M4.51,86.721C1.703,92.588,0,99.073,0,106v300c0,6.923,1.701,13.409,4.506,19.274L173.789,256L4.51,86.721z"/><path d="M317.002,277.213l-51.396,49.393c-2.93,2.93-6.768,4.395-10.605,4.395s-7.676-1.465-10.605-4.395L195,277.211 L25.714,446.486C31.582,449.295,38.071,451,45,451h422c6.927,0,13.412-1.703,19.279-4.51L317.002,277.213z"/></svg>
+            </a>
+          {%- endif -%}
+        </div>
+        {%- elsif section.settings.panel_title != blank -%}
+          <p class="qsw-panel__title qsw-panel__title--inline">{{ section.settings.panel_title | escape }}</p>
+        {%- else -%}
+          <div class="qsw-contact-strip"></div>
+        {%- endif -%}
+
+        <button
+          id="qsw-close"
+          class="qsw-close-btn"
+          type="button"
+          aria-label="Close support"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M11.414 10l6.293-6.293a1 1 0 10-1.414-1.414L10 8.586 3.707 2.293a1 1 0 00-1.414 1.414L8.586 10l-6.293 6.293a1 1 0 101.414 1.414L10 11.414l6.293 6.293A.998.998 0 0018 17a.999.999 0 00-.293-.707L11.414 10z"/></svg>
+        </button>
+      </div>
+      {%- if qsw_has_social and section.settings.panel_title != blank -%}
+        <p class="qsw-panel__title">{{ section.settings.panel_title | escape }}</p>
+      {%- endif -%}
+    </div>
+
+    {%- comment -%} View container — JS swaps active view {%- endcomment -%}
+    <div class="qsw-views">
+
+      {%- comment -%} View 1: Category grid {%- endcomment -%}
+      <div id="qsw-view-home" class="qsw-view qsw-view--active" role="region" aria-label="Support categories">
+        {%- if qsw_has_cats -%}
+        <div class="qsw-featured__headings">
+          <p class="qsw-featured__heading">{{ section.settings.categories_heading | default: 'FAQ Categories' }}</p>
+          {%- if section.settings.categories_subheading != blank -%}
+            <p class="qsw-featured__subheading">{{ section.settings.categories_subheading | escape }}</p>
+          {%- endif -%}
+        </div>
+        {%- endif -%}
+        <div class="qsw-categories">
+          {%- assign cat_i = -1 -%}
+          {%- for block in section.blocks -%}
+            {%- if block.type == 'category' -%}
+              {%- assign cat_i = cat_i | plus: 1 -%}
+              {%- comment -%} block.shopify_attributes injects data attributes that enable
+                section-highlighting in the Shopify theme editor {%- endcomment -%}
+              <button
+                class="qsw-category-card"
+                type="button"
+                data-cat-index="{{ cat_i }}"
+                style="--qsw-cat-color: {{ block.settings.color }};"
+                {{ block.shopify_attributes }}
+              >
+                {%- if block.settings.icon != blank -%}
+                  <img
+                    class="qsw-category-card__icon"
+                    src="{{ block.settings.icon | image_url: width: 80 }}"
+                    alt=""
+                    width="40"
+                    height="40"
+                    loading="lazy"
+                    aria-hidden="true"
+                  >
+                {%- else -%}
+                  <img
+                    class="qsw-category-card__icon"
+                    src="{{ qsw_default_icon }}"
+                    alt=""
+                    width="40"
+                    height="40"
+                    loading="lazy"
+                    aria-hidden="true"
+                  >
+                {%- endif -%}
+                <span class="qsw-category-card__title">{{ block.settings.title }}</span>
+              </button>
+            {%- endif -%}
+          {%- endfor -%}
+          {%- comment -%} cat_i remains -1 if the loop ran but found no category blocks {%- endcomment -%}
+          {%- if cat_i == -1 -%}
+            <p class="qsw-empty-categories">
+              {%- if request.design_mode -%}
+                Use the <strong>Add block</strong> option to add your first category.
+                <span class="qsw-empty-categories__note">Note: The widget is hidden from visitors until at least one category is added.</span>
+              {%- else -%}
+                No topics available yet.
+              {%- endif -%}
+            </p>
+          {%- endif -%}
+        </div>
+      </div>
+
+      {%- comment -%} Views 2 & 3 are empty shells — JS populates them at runtime.
+        The [hidden] attribute is managed by JS; CSS overrides display:none so
+        the slide transition can animate between views. {%- endcomment -%}
+
+      {%- comment -%} View 2: Question list (populated by JS) {%- endcomment -%}
+      <div id="qsw-view-questions" class="qsw-view" role="region" aria-label="Questions" hidden>
+        <div class="qsw-view-nav">
+          {%- render 'qsw-back-btn', btn_id: 'qsw-back-questions' -%}
+          <span id="qsw-questions-title" class="qsw-view-title"></span>
+        </div>
+        <ul id="qsw-question-list" class="qsw-question-list" role="list"></ul>
+      </div>
+
+      {%- comment -%} View 3: Answer (populated by JS) {%- endcomment -%}
+      <div id="qsw-view-answer" class="qsw-view" role="region" aria-label="Answer" hidden>
+        <div class="qsw-view-nav">
+          {%- render 'qsw-back-btn', btn_id: 'qsw-back-answer' -%}
+          <div class="qsw-view-nav__info">
+            <span id="qsw-answer-question" class="qsw-view-title"></span>
+            <span id="qsw-answer-cat" class="qsw-view-cat"></span>
+          </div>
+        </div>
+        <div id="qsw-answer-content" class="qsw-answer-content rte"></div>
+        <div class="qsw-answer-nav">
+          <div class="qsw-pagination">
+            <div class="qsw-navitem" hidden>
+              <button id="qsw-prev" class="qsw-navlink qsw-navlink--prev" type="button" aria-label="Previous question">
+                <span class="qsw-navlink__icon"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M17 9H5.414l3.293-3.293a.999.999 0 1 0-1.414-1.414l-5 5a.999.999 0 0 0 0 1.414l5 5a.997.997 0 0 0 1.414 0 .999.999 0 0 0 0-1.414L5.414 11H17a1 1 0 1 0 0-2z"/></svg></span>
+                <span id="qsw-prev-label" class="qsw-navlink__label"></span>
+              </button>
+            </div>
+            <div class="qsw-navitem" hidden>
+              <button id="qsw-next" class="qsw-navlink qsw-navlink--next" type="button" aria-label="Next question">
+                <span class="qsw-navlink__icon"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M17.707 9.293l-5-5a.999.999 0 10-1.414 1.414L14.586 9H3a1 1 0 100 2h11.586l-3.293 3.293a.999.999 0 101.414 1.414l5-5a.999.999 0 000-1.414z"/></svg></span>
+                <span id="qsw-next-label" class="qsw-navlink__label"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>{%- comment -%} /.qsw-views {%- endcomment -%}
+    <div id="qsw-sr-live" role="status" aria-live="polite" aria-atomic="true" class="qsw-sr-only"></div>
+  </div>{%- comment -%} /#qsw-panel {%- endcomment -%}
+</div>{%- comment -%} /#qsw-launcher-wrapper {%- endcomment -%}
+{%- endif -%}
+
+<script src="{{ 'quick-support-widget.js' | asset_url }}" defer="defer"></script>
+
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Quick Support Widget",
+  "max_blocks": 50,
+  "settings": [
+    {
+      "type": "header",
+      "content": "Visibility"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_widget",
+      "label": "Show widget",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Launcher button"
+    },
+    {
+      "type": "color",
+      "id": "launcher_bg_color",
+      "label": "Background colour",
+      "default": "#C0392B"
+    },
+    {
+      "type": "color",
+      "id": "launcher_icon_color",
+      "label": "Icon colour",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "range",
+      "id": "launcher_size",
+      "label": "Button size",
+      "min": 40,
+      "max": 80,
+      "step": 4,
+      "unit": "px",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "launcher_offset_bottom",
+      "label": "Distance from bottom edge",
+      "min": 12,
+      "max": 80,
+      "step": 4,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "launcher_offset_left",
+      "label": "Distance from left edge",
+      "min": 12,
+      "max": 80,
+      "step": 4,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "header",
+      "content": "Launcher icon"
+    },
+    {
+      "type": "select",
+      "id": "launcher_preset_icon",
+      "label": "Preset icon",
+      "info": "Ignored when a custom icon image is uploaded below.",
+      "options": [
+        { "value": "help", "label": "Question mark" },
+        { "value": "chat", "label": "Chat bubble" },
+        { "value": "headphones", "label": "Headphones" }
+      ],
+      "default": "headphones"
+    },
+    {
+      "type": "image_picker",
+      "id": "launcher_custom_icon",
+      "label": "Custom icon image",
+      "info": "Upload a square PNG or SVG. This overrides the preset icon."
+    },
+    {
+      "type": "header",
+      "content": "Contact strip"
+    },
+    {
+      "type": "checkbox",
+      "id": "phone_show",
+      "label": "Show phone",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "phone_number",
+      "label": "Phone number"
+    },
+    {
+      "type": "text",
+      "id": "phone_label",
+      "label": "Phone tooltip label",
+      "default": "Continue on Phone"
+    },
+        {
+      "type": "checkbox",
+      "id": "whatsapp_show",
+      "label": "Show WhatsApp",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "whatsapp_number",
+      "label": "WhatsApp number",
+      "info": "Include country code, e.g. +919876543210"
+    },
+    {
+      "type": "text",
+      "id": "whatsapp_label",
+      "label": "WhatsApp tooltip label",
+      "default": "Continue on WhatsApp"
+    },
+    {
+      "type": "checkbox",
+      "id": "email_show",
+      "label": "Show email",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "email_address",
+      "label": "Email address"
+    },
+    {
+      "type": "text",
+      "id": "email_label",
+      "label": "Email tooltip label",
+      "default": "Continue on Email"
+    },
+    {
+      "type": "header",
+      "content": "Categories section"
+    },
+    {
+      "type": "text",
+      "id": "categories_heading",
+      "label": "Section heading",
+      "default": "FAQ Categories"
+    },
+    {
+      "type": "text",
+      "id": "categories_subheading",
+      "label": "Section subheading"
+    },
+    {
+      "type": "header",
+      "content": "Featured section"
+    },
+    {
+      "type": "text",
+      "id": "featured_heading",
+      "label": "Section heading",
+      "default": "General Queries"
+    },
+    {
+      "type": "text",
+      "id": "featured_subheading",
+      "label": "Section subheading"
+    },
+    {
+      "type": "range",
+      "id": "featured_max_per_cat",
+      "label": "Max questions per category",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "default": 2
+    },
+    {
+      "type": "header",
+      "content": "Theme"
+    },
+    {
+      "type": "color",
+      "id": "brand_accent_color",
+      "label": "Primary brand colour",
+      "info": "Used for the header, hover states, and focus outlines throughout the widget.",
+      "default": "#C0392B"
+    },
+    {
+      "type": "color",
+      "id": "panel_bg_color",
+      "label": "Panel background",
+      "default": "#F6F6F8"
+    },
+    {
+      "type": "color",
+      "id": "panel_text_color",
+      "label": "Primary text colour",
+      "default": "#202223"
+    },
+    {
+      "type": "color",
+      "id": "secondary_text_color",
+      "label": "Secondary text colour",
+      "default": "#6D7175"
+    },
+    {
+      "type": "range",
+      "id": "panel_corner_radius",
+      "label": "Corner radius",
+      "min": 0,
+      "max": 24,
+      "step": 2,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "font_picker",
+      "id": "widget_font",
+      "label": "Font",
+      "info": "Choose any font from Shopify's library. To match your store's body font, pick the same font used in your theme settings.",
+      "default": "assistant_n4"
+    },
+    {
+      "type": "header",
+      "content": "Copy"
+    },
+    {
+      "type": "text",
+      "id": "panel_title",
+      "label": "Panel header title",
+      "info": "Shown inline in the header row when no contact icons are added. Shifts below the icons when contact icons are present."
+    },
+    {
+      "type": "text",
+      "id": "empty_state_text",
+      "label": "Empty category message",
+      "default": "No questions yet."
+    }
+  ],
+  "blocks": [
+    {
+      "type": "category",
+      "name": "Category",
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Category title",
+          "default": "Orders"
+        },
+        {
+          "type": "image_picker",
+          "id": "icon",
+          "label": "Category icon image"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Accent colour",
+          "default": "#C0392B"
+        }
+      ]
+    },
+    {
+      "type": "question",
+      "name": "Question",
+      "settings": [
+        {
+          "type": "paragraph",
+          "content": "Place this block immediately below the category it belongs to. Drag to reorder."
+        },
+        {
+          "type": "image_picker",
+          "id": "icon",
+          "label": "Question icon image"
+        },
+        {
+          "type": "text",
+          "id": "question",
+          "label": "Question",
+          "default": "Where is my order?"
+        },
+        {
+          "type": "richtext",
+          "id": "answer",
+          "label": "Answer",
+          "default": "<p>You can track your order using the tracking link sent to your email after dispatch.</p>"
+        },
+        {
+          "type": "checkbox",
+          "id": "featured",
+          "label": "Show in featured section",
+          "default": false,
+          "info": "If no questions are flagged, the first questions up to the category max are shown instead."
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Quick Support Widget",
+      "blocks": [
+        {
+          "type": "category",
+          "settings": {
+            "title": "Orders",
+            "color": "#C0392B"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "Where is my order?",
+            "answer": "<p>You can track your order using the tracking link sent to your email after dispatch. It may take up to 24 hours for tracking to activate.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "Can I cancel my order?",
+            "answer": "<p>Orders can be cancelled within 2 hours of placement. After that, the order may already be packed. Contact us immediately via WhatsApp or email and we'll do our best to help.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "I received a wrong item — what do I do?",
+            "answer": "<p>We're sorry about that! Please email us a photo of the item you received within 48 hours of delivery. We'll arrange a replacement or full refund at no extra cost.</p>"
+          }
+        },
+        {
+          "type": "category",
+          "settings": {
+            "title": "Shipping",
+            "color": "#E67E22"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "How long does delivery take?",
+            "answer": "<p>Standard delivery takes 3–5 business days. Express delivery (1–2 days) is available at checkout for select pin codes.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "Do you ship internationally?",
+            "answer": "<p>Yes! We ship to over 30 countries. International delivery typically takes 7–14 business days. Customs duties may apply depending on your country.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "Is free shipping available?",
+            "answer": "<p>Free standard shipping is available on all orders above ₹999. Orders below this amount have a flat shipping fee of ₹99.</p>"
+          }
+        },
+        {
+          "type": "category",
+          "settings": {
+            "title": "Returns",
+            "color": "#2980B9"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "What is your return policy?",
+            "answer": "<p>We accept returns within 7 days of delivery. Items must be unused, unwashed, and in original packaging with tags intact.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "How do I initiate a return?",
+            "answer": "<p>Go to your account → Orders → select the item → click 'Return'. Alternatively, contact our support team via email or WhatsApp with your order number.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "When will I get my refund?",
+            "answer": "<p>Refunds are processed within 5–7 business days after we receive and inspect the returned item. You'll get a confirmation email once it's done.</p>"
+          }
+        },
+        {
+          "type": "category",
+          "settings": {
+            "title": "Payments",
+            "color": "#27AE60"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "What payment methods do you accept?",
+            "answer": "<p>We accept credit/debit cards (Visa, Mastercard, Amex), UPI, net banking, wallets (Paytm, PhonePe), and cash on delivery in select areas.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "Is it safe to pay on your website?",
+            "answer": "<p>Absolutely. Our checkout is secured with SSL encryption and powered by Razorpay, a PCI-DSS compliant payment gateway. We never store your card details.</p>"
+          }
+        },
+        {
+          "type": "category",
+          "settings": {
+            "title": "Products",
+            "color": "#8E44AD"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "How do I find the right size?",
+            "answer": "<p>Each product page has a detailed size guide with measurements in both inches and centimetres. If you're between sizes, we recommend sizing up for a comfortable fit.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "Are your products authentic?",
+            "answer": "<p>Yes, all products are 100% authentic and sourced directly from brands or authorised distributors. We do not sell replicas or grey-market goods.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "A product I want is out of stock — will it be restocked?",
+            "answer": "<p>Use the 'Notify Me' button on the product page to get an email the moment it's back in stock. Most popular items are restocked within 2–3 weeks.</p>"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}
