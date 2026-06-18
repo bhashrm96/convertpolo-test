@@ -19,10 +19,6 @@
 
 {%- if section.settings.show_widget -%}
 
-{%- comment -%} Single source for the fallback icon URL used in both the
-  JSON data block and the category card loop. {%- endcomment -%}
-{%- assign qsw_default_icon = 'https://cdn.shopify.com/s/files/1/0615/9591/0319/files/hand-delivery-box-box-svgrepo-com.svg?v=1738088007' -%}
-
 {%- comment -%} ── 1. Boolean flags ──────────────────────────────────────
   Computed once at the top and reused throughout the template to avoid
   repeating the same loop or condition checks inline. {%- endcomment -%}
@@ -98,7 +94,6 @@
         {
           "id": {{ cat_i }},
           "title": {{ block.settings.title | json }},
-          "color": {{ block.settings.color | json }},
           "questions": [
             {%- assign q_i = -1 -%}
             {%- assign in_this_cat = false -%}
@@ -117,11 +112,7 @@
                   "text": {{ qblock.settings.question | json }},
                   "answer": {{ qblock.settings.answer | json }},
                   "featured": {{ qblock.settings.featured | default: false }},
-                  {%- if qblock.settings.icon != blank -%}
-                  "image": {{ qblock.settings.icon | image_url: width: 80 | json }}
-                  {%- else -%}
-                  "image": {{ qsw_default_icon | json }}
-                  {%- endif -%}
+                  "image": {%- if qblock.settings.icon != blank -%}{{ qblock.settings.icon | image_url: width: 80 | json }}{%- elsif block.settings.icon != blank -%}{{ block.settings.icon | image_url: width: 80 | json }}{%- else -%}null{%- endif -%}
                 }
               {%- endif -%}
             {%- endfor -%}
@@ -286,23 +277,12 @@
                 class="qsw-category-card"
                 type="button"
                 data-cat-index="{{ cat_i }}"
-                style="--qsw-cat-color: {{ block.settings.color }};"
                 {{ block.shopify_attributes }}
               >
                 {%- if block.settings.icon != blank -%}
                   <img
                     class="qsw-category-card__icon"
                     src="{{ block.settings.icon | image_url: width: 80 }}"
-                    alt=""
-                    width="40"
-                    height="40"
-                    loading="lazy"
-                    aria-hidden="true"
-                  >
-                {%- else -%}
-                  <img
-                    class="qsw-category-card__icon"
-                    src="{{ qsw_default_icon }}"
                     alt=""
                     width="40"
                     height="40"
@@ -635,12 +615,6 @@
           "type": "image_picker",
           "id": "icon",
           "label": "Category icon image"
-        },
-        {
-          "type": "color",
-          "id": "color",
-          "label": "Accent colour",
-          "default": "#C0392B"
         }
       ]
     },
@@ -686,8 +660,7 @@
         {
           "type": "category",
           "settings": {
-            "title": "Orders",
-            "color": "#C0392B"
+            "title": "Orders"
           }
         },
         {
@@ -714,8 +687,7 @@
         {
           "type": "category",
           "settings": {
-            "title": "Shipping",
-            "color": "#E67E22"
+            "title": "Shipping"
           }
         },
         {
@@ -742,8 +714,7 @@
         {
           "type": "category",
           "settings": {
-            "title": "Returns",
-            "color": "#2980B9"
+            "title": "Returns"
           }
         },
         {
@@ -770,8 +741,7 @@
         {
           "type": "category",
           "settings": {
-            "title": "Payments",
-            "color": "#27AE60"
+            "title": "Payments"
           }
         },
         {
@@ -791,8 +761,7 @@
         {
           "type": "category",
           "settings": {
-            "title": "Products",
-            "color": "#8E44AD"
+            "title": "Products"
           }
         },
         {

@@ -188,10 +188,8 @@
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'qsw-question-btn';
-      // escapeHtml used for q.text — q.image comes from Liquid so is already
-      // controlled, but question text is merchant-entered free text
       btn.innerHTML =
-        '<img class="qsw-question-btn__avatar" src="' + q.image + '" alt="" aria-hidden="true">' +
+        (q.image ? '<img class="qsw-question-btn__avatar" src="' + q.image + '" alt="" aria-hidden="true">' : '') +
         '<div class="qsw-question-btn__text">' +
           '<span class="qsw-question-btn__title">' + escapeHtml(q.text) + '</span>' +
           '<span class="qsw-question-btn__cat">' + escapeHtml(cat.title) + '</span>' +
@@ -280,7 +278,7 @@
       btn.type = 'button';
       btn.className = 'qsw-question-btn';
       btn.innerHTML =
-        '<img class="qsw-question-btn__avatar" src="' + item.image + '" alt="" aria-hidden="true">' +
+        (item.image ? '<img class="qsw-question-btn__avatar" src="' + item.image + '" alt="" aria-hidden="true">' : '') +
         '<div class="qsw-question-btn__text">' +
           '<span class="qsw-question-btn__title">' + escapeHtml(item.text) + '</span>' +
           '<span class="qsw-question-btn__cat">' + escapeHtml(item.catTitle) + '</span>' +
