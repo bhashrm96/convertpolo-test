@@ -534,9 +534,6 @@
   font-size: 20px;
   font-weight: 700;
   color: var(--qsw-panel-text, #202223);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   /* line-height matches the back button height so they align vertically */
   line-height: 28px;
 }
@@ -853,6 +850,7 @@
   color: var(--qsw-panel-text-secondary, #6D7175);
   transition: color 200ms cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .qsw-navlink:hover {
