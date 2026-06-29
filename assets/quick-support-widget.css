@@ -536,6 +536,17 @@
   color: var(--qsw-panel-text, #202223);
   /* line-height matches the back button height so they align vertically */
   line-height: 28px;
+  /* Always show the complete question text — never clamp or truncate.
+     display:block + min-width:0 lets it wrap to as many lines as needed
+     inside the flex nav, and overflow-wrap/word-break keep long unbroken
+     strings from overflowing the panel in any browser. */
+  display: block;
+  min-width: 0;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* Answer view nav has two stacked labels (question + category) */
@@ -890,6 +901,12 @@
   font-weight: 500;
   min-width: 0;
   line-height: 1.4;
+  /* Prev/Next labels stay on a single line — flex:1 + min-width:0 lets the
+     label shrink within the button so the ellipsis can take effect. */
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── 14. Mobile breakpoint ────────────────────────────────── */
